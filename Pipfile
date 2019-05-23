@@ -6,11 +6,11 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
+tensorflow-gpu = "*"
+requests = "*"
 keras = "*"
 jupyter = "*"
 fastprogress = "*"
-requests = "*"
-tensorflow = "*"
 pillow = "*"
 matplotlib = "*"
 
