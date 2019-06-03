@@ -2,16 +2,20 @@ import sys
 import cv2
 import math
 import numpy as np
+import logging
+import tensorflow as tf
 from keras import models
 
+tf.logging.set_verbosity(tf.logging.ERROR)
+logging.basicConfig(level=logging.INFO, format='%(name)s:%(levelname)s: %(message)s')
+LOGGER = logging.getLogger("ClosingCredits")
+
 if len(sys.argv) < 2:
-    print("Missing arguments!")
-    print("You should provide to arguments to the script. First, path to the video and then path to the model.")
+    LOGGER.error("Missing arguments! You should provide to arguments to the script. First, path to the video and then path to the model.")
     exit()
 
 video_path = sys.argv[1]
 model_path = sys.argv[2]
-
 
 model = models.load_model(model_path) # loading the pretrained model
 metadata = [] # Contains the timestamp (in milliseconds) and frame ID of all frames fed into the model
@@ -25,6 +29,8 @@ cutoff = int((width - height)/2)
 frame_rate = capture.get(5)
 total_frames = capture.get(7)
 
+LOGGER.info(f"Movie metadata - width: {width}, height: {height}, framerate: {frame_rate}"
+            f"total_frames: {total_frames} currentframe: {capture.get(1)}")
 
 def get_starting_index(estimates, window_size=50):
     window = np.zeros((window_size,))
@@ -54,11 +60,14 @@ while(capture.isOpened()):
         frame = cv2.resize(frame, (224, 224))/255.0
         frames.append(frame)
 
+LOGGER.info("finished preprocessing frames.")
+
 frames = np.array(frames)
 capture.release()
 
 prediction_classes = model.predict_classes(frames)
 estimates = np.array([x[0] for x in prediction_classes])
+LOGGER.info("prediction stage is done.")
 
 def zero_pad(variable):
     if int(variable) < 10:
@@ -66,11 +75,11 @@ def zero_pad(variable):
     else:
         return str(int(variable))
 
-credits_info = metadata[get_starting_index(estimates)+1]
+credits_info = metadata[get_starting_index(estimates)]
 hour = credits_info['time_progress']//3600000
 minute = (credits_info['time_progress'] - hour * 3600000)//60000
 second = (credits_info['time_progress'] - hour * 3600000 - minute * 60000)//1000
 hour, minute, second = zero_pad(hour), zero_pad(minute), zero_pad(second)
 ms = int(math.floor(credits_info['time_progress']) % 1000)
 
-print(f"Credits started rolling at {hour}:{minute}:{second}.{ms}, at {credits_info['frame_id']} frame.")
+LOGGER.info(f"Credits started rolling at {hour}:{minute}:{second}.{ms}, at {credits_info['frame_id']} frame.")
