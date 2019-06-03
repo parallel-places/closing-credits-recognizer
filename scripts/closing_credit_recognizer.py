@@ -9,6 +9,7 @@ from keras import models
 tf.logging.set_verbosity(tf.logging.ERROR)
 logging.basicConfig(level=logging.INFO, format='%(name)s:%(levelname)s: %(message)s')
 LOGGER = logging.getLogger("ClosingCredits")
+STARTING_POINT = 0.8
 
 if len(sys.argv) < 2:
     LOGGER.error("Missing arguments! You should provide to arguments to the script. First, path to the video and then path to the model.")
@@ -28,6 +29,7 @@ height = capture.get(4)
 cutoff = int((width - height)/2)
 frame_rate = capture.get(5)
 total_frames = capture.get(7)
+capture.set(1, int(total_frames*STARTING_POINT))
 
 LOGGER.info(f"Movie metadata - width: {width}, height: {height}, framerate: {frame_rate}"
             f"total_frames: {total_frames} currentframe: {capture.get(1)}")
@@ -38,7 +40,8 @@ def get_starting_index(estimates, window_size=50):
     for i in range(estimates.shape[0]-window_size):
         if count == 10:
             return index
-        if np.sum(estimates[i:(i+window_size)] == window)/window_size > 0.95:
+        ratio_in_window = np.sum(estimates[i:(i+window_size)] == window)/window_size
+        if ratio_in_window > 0.9:
             if count == 0:
                 index = i
             count += 1
@@ -54,7 +57,7 @@ while(capture.isOpened()):
     ret, frame = capture.read()
     if ret != True:
         break
-    if frame_info['frame_id']/total_frames > 0.75 and frame_info['frame_id'] % math.floor(frame_rate/10) == 0:
+    if frame_info['frame_id'] % math.floor(frame_rate/10) == 0:
         metadata.append(frame_info)
         frame = frame[:, cutoff:-cutoff, :]
         frame = cv2.resize(frame, (224, 224))/255.0
