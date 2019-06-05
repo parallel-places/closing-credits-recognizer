@@ -9,11 +9,12 @@ from keras import models
 tf.logging.set_verbosity(tf.logging.ERROR)
 logging.basicConfig(level=logging.INFO, format='%(name)s:%(levelname)s: %(message)s')
 LOGGER = logging.getLogger("ClosingCredits")
-STARTING_POINT = 0.8
+LIMIT_POINT = 0.8
 ACCEPTANCE_THRESHOLD = 0.9
 AREAS = 3
+FRAME_PER_SECOND = 5
 
-if len(sys.argv) < 2:
+if len(sys.argv) < 3:
     LOGGER.error("Missing arguments! You should provide to arguments to the script. First, path to the video and then path to the model.")
     exit()
 
@@ -29,19 +30,19 @@ width = capture.get(3)
 height = capture.get(4)
 cutoff = int((width - height)/(AREAS-1))
 frame_rate = capture.get(5)
+frame_step = math.ceil(frame_rate/FRAME_PER_SECOND)
 total_frames = capture.get(7)
 
 
-LOGGER.info(f"Movie metadata - width: {width}, height: {height}, framerate: {frame_rate}, "
-            f"total_frames: {total_frames}, currentframe: {capture.get(1)}")
+LOGGER.info(f"Movie metadata - width: {width}, height: {height}, framerate: {frame_rate}, total_frames: {total_frames}")
 
-def get_starting_index(estimates, window_size=50):
+def get_starting_index(estimates, window_size=25):
     window = np.zeros((window_size,))
     count = 0
     for i in range(estimates.shape[0]-window_size):
         if count == 10:
             return index
-        ratio_in_window = np.sum(estimates[i:(i+window_size)] == window)/window_size
+        ratio_in_window = np.sum(estimates[i:(i+window_size)] != window)/window_size
         if ratio_in_window > ACCEPTANCE_THRESHOLD:
             if count == 0:
                 index = i
@@ -54,19 +55,19 @@ def get_starting_index(estimates, window_size=50):
 frame_set = []
 for i in range(AREAS):
     frames = []
-    capture.set(1, int(total_frames*STARTING_POINT))
-    while(capture.isOpened()):
+    current_frame = total_frames - 1
+    while current_frame > total_frames * LIMIT_POINT:
+        capture.set(1, int(current_frame))
         frame_info = {"time_progress": capture.get(0),
                       "frame_id": capture.get(1)}
         ret, frame = capture.read()
-        if ret != True:
-            break
-        if frame_info['frame_id'] % math.floor(frame_rate/10) == 0:
+        if ret == True:
             metadata.append(frame_info)
             step = i*cutoff
             frame = frame[:, step:int(height)+step, :]
             frame = cv2.resize(frame, (224, 224))/255.0
             frames.append(frame)
+        current_frame -= frame_step
     frame_set.append(frames)
 
 LOGGER.info("finished preprocessing frames.")
@@ -87,7 +88,7 @@ def zero_pad(variable):
     else:
         return str(int(variable))
 
-credits_info = metadata[min([get_starting_index(estimates) for estimates in estimates_set])]
+credits_info = metadata[max([get_starting_index(estimates) for estimates in estimates_set])]
 hour = credits_info['time_progress']//3600000
 minute = (credits_info['time_progress'] - hour * 3600000)//60000
 second = (credits_info['time_progress'] - hour * 3600000 - minute * 60000)//1000
